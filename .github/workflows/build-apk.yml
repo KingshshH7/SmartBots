@@ -18,8 +18,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Accept Android SDK licenses
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+      - name: Install required Android SDK components
+        run: |
+          SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMGR" --licenses || true
+          "$SDKMGR" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -27,10 +30,29 @@ jobs:
           gradle-version: 8.7
 
       - name: Build debug APK
-        run: gradle :app:assembleDebug --no-daemon
+        run: |
+          set -o pipefail
+          gradle :app:assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Surface build errors
+        if: failure()
+        run: |
+          echo "---- last 60 lines of build.log ----"
+          tail -n 60 build.log || true
+          grep -iE "error|exception|failed" build.log | tail -n 25 | while IFS= read -r line; do
+            safe=$(echo "$line" | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')
+            echo "::error::$safe"
+          done
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: SmartBot-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload build log (always, for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
