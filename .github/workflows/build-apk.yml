@@ -37,12 +37,13 @@ jobs:
       - name: Surface build errors
         if: failure()
         run: |
-          echo "---- last 60 lines of build.log ----"
-          tail -n 60 build.log || true
-          grep -iE "error|exception|failed" build.log | tail -n 25 | while IFS= read -r line; do
-            safe=$(echo "$line" | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')
-            echo "::error::$safe"
-          done
+          python3 - <<'PYEOF'
+with open("build.log", "r", errors="replace") as f:
+    lines = f.readlines()
+tail = "".join(lines[-180:])
+safe = tail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+print(f"::error::{safe}")
+PYEOF
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
